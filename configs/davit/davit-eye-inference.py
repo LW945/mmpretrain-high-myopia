@@ -1,9 +1,15 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
 import numpy as np
 import torch
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from mmpretrain.apis import ImageClassificationInferencer
 from mmpretrain.evaluation.metrics.auc import AUC
 from mmpretrain.evaluation.metrics.single_label import (
@@ -19,6 +25,42 @@ IMAGE_SUFFIXES = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
 DEFAULT_CI_LEVEL = 0.95
 DEFAULT_CI_BOOTSTRAP_SAMPLES = 2000
 DEFAULT_CI_SEED = 0
+
+
+def get_default_checkpoint(repo_root, model_name):
+    work_dir = repo_root / 'work_dirs' / model_name
+    last_checkpoint = work_dir / 'last_checkpoint'
+    if last_checkpoint.is_file():
+        return str(last_checkpoint)
+    return str(work_dir / 'epoch_100.pth')
+
+
+def resolve_checkpoint_path(checkpoint):
+    if checkpoint is None:
+        return None
+
+    checkpoint_path = Path(checkpoint).expanduser()
+    if checkpoint_path.name != 'last_checkpoint':
+        return str(checkpoint_path)
+
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(
+            f'Checkpoint pointer file does not exist: {checkpoint_path}')
+
+    target = checkpoint_path.read_text(encoding='utf-8').strip()
+    if not target:
+        raise ValueError(
+            f'Checkpoint pointer file is empty: {checkpoint_path}')
+
+    target_path = Path(target).expanduser()
+    if not target_path.is_absolute():
+        target_path = checkpoint_path.parent / target_path
+    if not target_path.is_file():
+        raise FileNotFoundError(
+            f'Checkpoint pointer {checkpoint_path} points to missing file: '
+            f'{target_path}')
+
+    return str(target_path)
 
 
 def collect_images(image_paths, image_dir):
@@ -331,10 +373,9 @@ def print_metrics(metrics, class_names, roc_path):
 
 def main():
     script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parents[1]
+    repo_root = REPO_ROOT
     model_name = 'davit-eye'
-    default_checkpoint = str(repo_root / 'work_dirs' / 'davit-eye' /
-                             'epoch_100.pth')
+    default_checkpoint = get_default_checkpoint(repo_root, model_name)
     default_image_dir = str(repo_root / 'data' / 'eye_area' / 'test')
 
     parser = ArgumentParser(
@@ -451,6 +492,10 @@ def main():
     if args.checkpoint is None:
         raise ValueError(
             'No checkpoint found. Pass --checkpoint /path/to/your_checkpoint.pth.')
+    resolved_checkpoint = resolve_checkpoint_path(args.checkpoint)
+    if resolved_checkpoint != args.checkpoint:
+        print(f'Resolved checkpoint: {resolved_checkpoint}')
+    args.checkpoint = resolved_checkpoint
     if args.ci_bootstrap_samples <= 0:
         raise ValueError('--ci-bootstrap-samples must be positive.')
     if not 0.0 < args.ci_level < 1.0:
