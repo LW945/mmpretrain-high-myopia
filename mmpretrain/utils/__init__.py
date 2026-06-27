@@ -2,11 +2,18 @@
 from .analyze import load_json_log
 from .collect_env import collect_env
 from .dependency import require
+from .heatmap import generate_gradcam_heatmaps, validate_gradcam_method
+from .inference_outputs import (build_inference_metrics_report,
+                                build_inference_output_paths,
+                                save_inference_metrics_report)
 from .misc import get_ori_model
 from .progress import track, track_on_main_process
 from .setup_env import register_all_modules
 
 __all__ = [
     'collect_env', 'register_all_modules', 'track_on_main_process',
-    'load_json_log', 'get_ori_model', 'track', 'require'
+    'load_json_log', 'get_ori_model', 'track', 'require',
+    'build_inference_output_paths', 'build_inference_metrics_report',
+    'save_inference_metrics_report', 'generate_gradcam_heatmaps',
+    'validate_gradcam_method'
 ]

@@ -53,8 +53,8 @@ class ImageClassificationInferencer(BaseInferencer):
     """  # noqa: E501
 
     visualize_kwargs: set = {
-        'resize', 'rescale_factor', 'draw_score', 'show', 'show_dir',
-        'wait_time'
+        'resize', 'rescale_factor', 'draw_pred', 'draw_score', 'show',
+        'show_dir', 'wait_time'
     }
 
     def __init__(self,
@@ -90,6 +90,8 @@ class ImageClassificationInferencer(BaseInferencer):
             rescale_factor (float, optional): Rescale the image by the rescale
                 factor for visualization. This is helpful when the image is too
                 large or too small for visualization. Defaults to None.
+            draw_pred (bool): Whether to draw prediction categories. Defaults
+                to True.
             draw_score (bool): Whether to draw the prediction scores
                 of prediction categories. Defaults to True.
             show (bool): Whether to display the visualization result in a
@@ -143,6 +145,7 @@ class ImageClassificationInferencer(BaseInferencer):
                   wait_time: int = 0,
                   resize: Optional[int] = None,
                   rescale_factor: Optional[float] = None,
+                  draw_pred=True,
                   draw_score=True,
                   show_dir=None):
         if not show and show_dir is None:
@@ -178,7 +181,7 @@ class ImageClassificationInferencer(BaseInferencer):
                 wait_time=wait_time,
                 rescale_factor=rescale_factor,
                 draw_gt=False,
-                draw_pred=True,
+                draw_pred=draw_pred,
                 draw_score=draw_score,
                 name=name,
                 out_file=out_file)

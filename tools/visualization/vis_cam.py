@@ -126,7 +126,7 @@ def reshape_transform(tensor, model, args):
         # For (B, L, C)
         num_extra_tokens = args.num_extra_tokens or getattr(
             model.backbone, 'num_extra_tokens', 1)
-
+        num_extra_tokens = 0
         tensor = tensor[:, num_extra_tokens:, :]
         # get heat_map_height and heat_map_width, preset input is a square
         heat_map_area = tensor.size()[1]
