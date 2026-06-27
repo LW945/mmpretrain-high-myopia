@@ -60,6 +60,111 @@ def _precision_recall_f1_support(pred_positive, gt_positive, average):
     return precision, recall, f1_score, support
 
 
+def calculate_sensitivity_specificity(confusion_matrix, positive_label=1):
+    """Calculate binary sensitivity and specificity from a confusion matrix.
+
+    The confusion matrix follows the MMPretrain convention: rows are ground
+    truth labels, and columns are predicted labels.
+    """
+    metrics = calculate_binary_classification_metrics(confusion_matrix,
+                                                      positive_label)
+    return metrics['sensitivity'], metrics['specificity']
+
+
+def calculate_binary_classification_metrics(confusion_matrix, positive_label=1):
+    """Calculate positive-class binary metrics from a confusion matrix.
+
+    The confusion matrix follows the MMPretrain convention: rows are ground
+    truth labels, and columns are predicted labels.
+    """
+    matrix = to_tensor(confusion_matrix)
+    if matrix.ndim != 2 or matrix.size(0) != matrix.size(1):
+        raise ValueError('The confusion matrix must be a square 2D matrix.')
+    if matrix.size(0) != 2:
+        raise ValueError(
+            'Sensitivity and specificity are only supported for binary '
+            'confusion matrices.')
+
+    positive_label = int(positive_label)
+    if positive_label < 0 or positive_label >= matrix.size(0):
+        raise ValueError(
+            f'The positive label index {positive_label} is out of range for '
+            f'{matrix.size(0)} classes.')
+
+    matrix = matrix.to(torch.float32)
+    tp = matrix[positive_label, positive_label]
+    fn = matrix[positive_label, :].sum() - tp
+    fp = matrix[:, positive_label].sum() - tp
+    tn = matrix.sum() - tp - fn - fp
+
+    precision = tp / torch.clamp(tp + fp, min=1) * 100
+    recall = tp / torch.clamp(tp + fn, min=1) * 100
+    f1_score = 2 * precision * recall / torch.clamp(
+        precision + recall, min=torch.finfo(torch.float32).eps)
+    sensitivity = recall
+    specificity = tn / torch.clamp(tn + fp, min=1) * 100
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1-score': f1_score,
+        'sensitivity': sensitivity,
+        'specificity': specificity,
+    }
+
+
+@METRICS.register_module()
+class BinaryLabelMetric(BaseMetric):
+    """Positive-class binary metrics calculated from the confusion matrix."""
+
+    default_prefix: Optional[str] = 'positive-class'
+
+    def __init__(self,
+                 positive_label: int = 1,
+                 items: Sequence[str] = ('precision', 'recall', 'f1-score'),
+                 num_classes: int = 2,
+                 collect_device: str = 'cpu',
+                 prefix: Optional[str] = None) -> None:
+        super().__init__(collect_device=collect_device, prefix=prefix)
+        supported_items = [
+            'precision', 'recall', 'f1-score', 'sensitivity', 'specificity'
+        ]
+        for item in items:
+            assert item in supported_items, (
+                f'The metric {item} is not supported by `BinaryLabelMetric`, '
+                f'please specify from {supported_items}.')
+        self.positive_label = int(positive_label)
+        self.items = tuple(items)
+        self.num_classes = num_classes
+
+    def process(self, data_batch, data_samples: Sequence[dict]) -> None:
+        for data_sample in data_samples:
+            if 'pred_score' in data_sample:
+                pred_score = data_sample['pred_score']
+                pred_label = pred_score.argmax(dim=0, keepdim=True)
+            else:
+                pred_label = data_sample['pred_label']
+
+            self.results.append({
+                'pred_label': pred_label.cpu(),
+                'gt_label': data_sample['gt_label'].cpu(),
+            })
+
+    def compute_metrics(self, results: List) -> dict:
+        pred_labels = []
+        gt_labels = []
+        for result in results:
+            pred_labels.append(result['pred_label'])
+            gt_labels.append(result['gt_label'])
+
+        confusion_matrix = ConfusionMatrix.calculate(
+            torch.cat(pred_labels),
+            torch.cat(gt_labels),
+            num_classes=self.num_classes)
+        metrics = calculate_binary_classification_metrics(
+            confusion_matrix, positive_label=self.positive_label)
+        return {item: metrics[item].item() for item in self.items}
+
+
 @METRICS.register_module()
 class Accuracy(BaseMetric):
     r"""Accuracy evaluation metric.
